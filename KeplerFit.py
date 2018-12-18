@@ -1,4 +1,4 @@
-### KeplerFit 
+### KeplerFit
 # Author: F. Bosco (Max Planck Institute for Astronomy, Heidelberg)
 # Last edited: 12/12/2018
 # Description: A small piece of code to fit a Keplerian velocity distribution model to position-velocity data
@@ -140,18 +140,48 @@ def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
     v = -1*np.sign(x - r0) * np.sqrt(const.G * mass * const.M_sun / np.abs(x - r0) / u.AU).to(u.km/u.s).value + v0
     return v
 
-def model_Keplerian(self, threshold, source_distance, return_stddevs=True, print_results=False, plot=False,
-                    flag_singularity=True, flag_radius=None, flag_intervals=None,
-                    weak_quadrants=False, fit_method=LevMarLSQFitter()):
+# Main function
+def model_Keplerian(self, threshold, source_distance,
+                    return_stddevs=True, print_results=False, plot=False,
+                    flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
+                    **kwargs):
 
     """
-    threshold: multiple of noise (for instance 3sigma)
+    # Arguments
+    threshold (int/ float): Set as multiples of PVdata.noise (for instance
+        3sigma)
+    source_distance (astropy.units.quantity):
+
+    # Keyword arguments
+    return_stddevs (boolean): The fit method LevMarLSQFitter is able to return
+        the standard deviation of the fit parameters. Default is True.
+    print_results (boolean): If True, the fit parameters will be displayed to
+        the terminal.
+    plot (boolean): If True, the fit will be displayed as a matplotlib pyplot.
+
+    #Optional keyword arguments:
+    flag_radius (astropy.units.Quantity): If given, then all data points within
+        this given radius from the position_reference are flagged.
+    flag_intervals (list of tupels of astropy.units.Quantity): Similar to
+        flag_radius, but arbitrary intervals may be flagged. Each interval is
+        given as a tuple of two radial distances from the position_reference.
+
+    # Returns:
+    best_fit (astropy.modelling.models.custom_model):
+    stddevs (numpy.array): Only if return_stddevs is True. The array entries
+        correspond to the best_fit instance parameters in the same order.
+    chi2 (float): chi-squared residual of the fit to the unflagged data.
     """
+
+    if 'model_kwargs' in kwargs:
+        model_kwargs = kwargs['model_kwargs']
+    else:
+        model_kwargs = {}
 
     if self.start_low(weak_quadrants=weak_quadrants):
-        init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+        init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
     else:
-        init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+        init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
     self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                      plot=False, weak_quadrants=weak_quadrants)
 
@@ -164,14 +194,16 @@ def model_Keplerian(self, threshold, source_distance, return_stddevs=True, print
         xdata.mask[i] = True
         ydata.mask[i] = True
         print('>> flagged the elements {}.'.format(i))
-    if flag_radius is not None:
+    if 'flag_radius' in kwargs:
+        flag_radius = kwargs['flag_radius']
         print('Flagging towards a radial distance of {}:'.format(flag_radius))
         flag_radius = flag_radius.to(u.AU).value
         i = np.where(np.abs(self.table['Distance'].value) < flag_radius)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
         print('>> flagged the elements {}.'.format(i))
-    if flag_intervals is not None:
+    if 'flag_intervals' in kwargs:
+        flag_intervals = kwargs['flag_intervals']
         print('Flagging intervals:')
         flagged = []
         for interval in flag_intervals:
