@@ -11,6 +11,7 @@ pvdata = PVdata('my_pv_data.fits', noise=5.66e-05*u.Jy/u.pixel, position_referen
 results = model_Keplerian(pvdata, 4, source_distance=2.0*u.kpc, return_stddevs=True, plot=True, 
                              flag_radius=50*u.AU,
                              #fit_method=SLSQPLSQFitter(),
+                             #velocity_interval=(-10*u.km/u.s, 10*u.km/u.s),
                              flag_intervals=[(-10000*u.AU, -3000*u.AU), (3000*u.AU, 10000*u.AU)])
 print(results)
 ```
