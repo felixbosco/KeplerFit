@@ -19,7 +19,21 @@ from astropy.modeling.fitting import LevMarLSQFitter
 # central class definition
 class PVdata(object):
 
-    def __init__(self, filename, noise, position_reference):
+    def __init__(self, filename, noise=None, position_reference=None):
+
+        """
+        # Arguments
+        filename (str): File name of the .fits file to initialize from.
+
+        #Optional keyword arguments:
+        noise (float/ astropy.units.Quantity): Noise of the data, required for
+            the threshold of the extreme velocities. By default the standard
+            deviation of the data is used.
+        position_reference (int): Position of the central massive object. By
+            default, the central position is used.
+        """
+
+        # read fits file
         with fits.open(filename) as hdulist:
             hdr = hdulist[0].header
             data = hdulist[0].data[0, 0]
@@ -28,44 +42,68 @@ class PVdata(object):
                 data = np.ma.masked_invalid(data)
         self.data = data
         self.data_unit = u.Unit(hdr['BUNIT'])
-        self.noise = float(noise / self.data_unit)
+        if noise is None:
+            self.noise = np.std(self.data)
+        else:
+            if isinstance(noise, u.Quantity):
+                self.noise = float(noise / self.data_unit)
+            else:
+                self.noise = noise
         self.position_resolution = (hdr['CDELT1'] * u.deg).to(u.arcsec)
         if self.position_resolution.value < 0.0:
             print('Shifting the position increment to positive value...')
             self.position_resolution = np.abs(self.position_resolution.value) * self.position_resolution.unit
-        self.position_reference = position_reference
+        if position_reference is None:
+            self.position_reference = int(hdr['NAXIS1'] / 2)
+        else:
+            self.position_reference = position_reference
         self.vLSR = (hdr['CRVAL2'] * u.m).to(u.km) / u.s
         self.velocity_resolution = (hdr['CDELT2'] * u.m).to(u.km) / u.s
         self.vLSR_channel = int(hdr['CRPIX2'] - 1) # convert from 1-based to 0-based counting
 
+
     # Seifried et al. (2016) algorithm
-    def start_low(self, weak_quadrants=False):
-        low = np.sum(self.data[:self.vLSR_channel, :self.position_reference]) + \
-                np.sum(self.data[self.vLSR_channel:, self.position_reference:])
-        high = np.sum(self.data[:self.vLSR_channel, self.position_reference:]) + \
-                np.sum(self.data[self.vLSR_channel:, :self.position_reference])
+    def start_low(self, indices={'min': 0, 'max': -1}, weak_quadrants=False):
+        low = np.sum(self.data[indices['min']:self.vLSR_channel, :self.position_reference]) + \
+                np.sum(self.data[self.vLSR_channel:indices['max'], self.position_reference:])
+        high = np.sum(self.data[indices['min']:self.vLSR_channel, self.position_reference:]) + \
+                np.sum(self.data[self.vLSR_channel:indices['max'], :self.position_reference])
         if not weak_quadrants:
             return low > high
         else:
             return low < high
 
-    def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False):
+
+    def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, **kwargs):
+        # initialize
+        indices = {'min': 0, 'max': -1}
+        if 'channel_interval' in kwargs:
+            channel_interval = kwargs['channel_interval']
+            if isinstance(channel_interval, tuple):
+                indices = {'min': channel_interval[0], 'max': channel_interval[1]}
+            else:
+                raise TypeError('The function estimate_extreme_channels() can only handle a single channel interval at a time but got {}!'.format(channel_interval))
+                print('>> Restriction for channels set to {}.'.format(indices))
         self.channels = np.ma.masked_array(np.zeros(self.data.shape[1]), mask=np.zeros(self.data.shape[1], dtype=bool))
+
+        # iteration over position coordinate
         for i, pos in enumerate(self.data.transpose()):
-            if self.start_low(weak_quadrants=weak_quadrants):
+            # initialize channel iteration
+            if self.start_low(indices=indices, weak_quadrants=weak_quadrants):
                 if i < self.position_reference:
-                    j = 0
+                    j = indices['min']
                     dj = 1
                 else:
-                    j = -1
+                    j = indices['max']
                     dj = -1
             else:
                 if i < self.position_reference:
-                    j = -1
+                    j = indices['max']
                     dj = -1
                 else:
-                    j = 0
+                    j = indices['min']
                     dj = 1
+            # iteration over channels for the current position i
             while pos[j] < threshold * self.noise and j % self.data.shape[0] != self.vLSR_channel:
                 j += dj
             if j == self.vLSR_channel:
@@ -73,10 +111,12 @@ class PVdata(object):
             else:
                 self.channels[i] = j % self.data.shape[0]
 
+        # for safety repeat flagging if channels equal to v_LSR
         for position, channel in enumerate(self.channels):
             if channel == self.vLSR_channel:
                 self.channels.mask[position] = True
 
+        # plot
         if plot:
             plt.plot(self.channels, 'o')
             plt.xlim(-1, self.data.shape[1]+1)
@@ -84,15 +124,46 @@ class PVdata(object):
             plt.grid()
             plt.show()
             plt.close()
+
+        # return
         return self.channels
+
 
     def __angle_to_length(self, angle, distance):
         return (angle.to(u.arcsec)).value * (distance.to(u.pc)).value * u.AU
 
-    def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False):
+
+    def __velocity_to_channel(self, velocity_tuple):
+        channel_tuple = []
+        for velocity in velocity_tuple:
+            channel = int((velocity - self.vLSR) / self.velocity_resolution) + self.vLSR_channel
+            channel_tuple.append(channel)
+        channel_tuple = tuple(channel_tuple)
+        print('>> Transfering the velocity interval {} into the channel interval {}, using the PV attributes:'.format(velocity_tuple, channel_tuple))
+        print({'vLSR': self.vLSR, 'v resolution': self.velocity_resolution, 'vLSR channel': self.vLSR_channel})
+        return channel_tuple
+
+
+    def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False, **kwargs):
+        # initialize the data table
         self.table = QTable(names=('Position', 'Channel', 'Angular distance', 'Distance', 'Velocity'),
                            dtype=(int, int, u.Quantity, u.Quantity, u.Quantity))
-        self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants)
+
+        # estimate the extreme channels
+        if 'velocity_interval' in kwargs:
+            #print('The handling of velocity intervals is not supported yet. Try channel_intervals...')
+            velocity_interval = kwargs['velocity_interval']
+            if isinstance(velocity_interval, tuple):
+                channel_interval = self.__velocity_to_channel(velocity_interval)
+            else:
+                raise TypeError('The function estimate_extreme_velocities() can only handle a single velocity interval at a time but got {}!'.format(velocity_interval))
+            self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=channel_interval)
+        elif 'channel_interval' in kwargs:
+            self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=kwargs['channel_interval'])
+        else:
+            self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants)
+
+        # transfer the channels into physical units
         for position, channel in enumerate(self.channels):
             angular_distance = (position - self.position_reference) * self.position_resolution
             distance = self.__angle_to_length(angular_distance, source_distance)
@@ -105,6 +176,8 @@ class PVdata(object):
         self.table['Angular distance'] = self.table['Angular distance']  * self.position_resolution.unit
         self.table['Distance'] = self.table['Distance'] * u.AU
         self.table['Velocity'] = self.table['Velocity'] * self.velocity_resolution.unit
+
+        # plot
         if plot:
             plt.plot(self.table['Distance'], self.table['Velocity'], 'o', label='data')
             plt.xlabel('Position offest ({})'.format(self.table['Distance'].unit))
@@ -115,6 +188,7 @@ class PVdata(object):
             plt.show()
             plt.close()
         return self.table
+
 
     def write_table(self, filename, x_offset=None, x_unit=u.arcsec):
         x = self.table['Angular distance']
@@ -173,6 +247,7 @@ def model_Keplerian(self, threshold, source_distance,
     chi2 (float): chi-squared residual of the fit to the unflagged data.
     """
 
+    # initialize the model
     if 'model_kwargs' in kwargs:
         model_kwargs = kwargs['model_kwargs']
     else:
@@ -182,8 +257,25 @@ def model_Keplerian(self, threshold, source_distance,
         init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
     else:
         init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
-    self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
-                                     plot=False, weak_quadrants=weak_quadrants)
+
+    # compute the velocity table
+    if 'velocity_interval' in kwargs:
+        # if isinstance(velocity_interval, tuple):
+        #     channel_interval = self.__velocity_to_channel(velocity_interval)
+        # elif isinstance(velocity_interval, list):
+        #     channel_interval = []
+        #     for velocity_interval_tuple in velocity_interval:
+        #         channel_interval.append(self.__velocity_to_channel(velocity_interval_tuple))
+        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
+                                         plot=False, weak_quadrants=weak_quadrants,
+                                         velocity_interval=kwargs['velocity_interval'])
+    elif 'channel_interval' in kwargs:
+        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
+                                         plot=False, weak_quadrants=weak_quadrants,
+                                         channel_interval=kwargs['channel_interval'])
+    else:
+        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
+                                         plot=False, weak_quadrants=weak_quadrants)
 
     # flag
     xdata = np.ma.masked_array(self.table['Distance'].value, np.zeros(self.table['Distance'].shape, dtype=bool))
@@ -193,7 +285,7 @@ def model_Keplerian(self, threshold, source_distance,
         i = np.where(np.abs(self.table['Distance'].value) < 1e-6)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
-        print('>> flagged the elements {}.'.format(i))
+        print('>> Flagged the elements {}.'.format(i))
     if 'flag_radius' in kwargs:
         flag_radius = kwargs['flag_radius']
         print('Flagging towards a radial distance of {}:'.format(flag_radius))
@@ -201,22 +293,23 @@ def model_Keplerian(self, threshold, source_distance,
         i = np.where(np.abs(self.table['Distance'].value) < flag_radius)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
-        print('>> flagged the elements {}.'.format(i))
+        print('>> Flagged the elements {}.'.format(i))
     if 'flag_intervals' in kwargs:
         flag_intervals = kwargs['flag_intervals']
         print('Flagging intervals:')
-        flagged = []
+        flagged = np.empty(shape=(0,), dtype=int)
         for interval in flag_intervals:
             i1 = np.where(interval[0].value < self.table['Distance'].value)[0]
             i2 = np.where(self.table['Distance'].value < interval[1].value)[0]
             i = np.intersect1d(i1, i2)
             xdata.mask[i] = True
             ydata.mask[i] = True
-            flagged.append(i)
+            flagged = np.append(flagged, i)
         if len(np.unique(flagged)) < 10:
-            print('>> flagged the elements {}.'.format(np.unique(flagged)))
+            print('>> Flagged the elements {}.'.format(np.unique(flagged)))
         else:
-            print('>> flagged {} elements.'.format(len(np.unique(flagged))))
+            print('>> Flagged {} elements.'.format(len(np.unique(flagged))))
+
 
     # model
     with warnings.catch_warnings():
