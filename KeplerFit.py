@@ -8,6 +8,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
+import astropy
 from astropy import units as u
 from astropy import constants as const
 from astropy.io import fits, ascii
@@ -76,11 +77,11 @@ class PVdata(object):
 
     def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, **kwargs):
         # initialize
-        indices = {'min': 0, 'max': -1}
+        indices = {'min': 0, 'max': -1, 'central': self.vLSR_channel}
         if 'channel_interval' in kwargs:
             channel_interval = kwargs['channel_interval']
             if isinstance(channel_interval, tuple):
-                indices = {'min': channel_interval[0], 'max': channel_interval[1]}
+                indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
             else:
                 raise TypeError('The function estimate_extreme_channels() can only handle a single channel interval at a time but got {}!'.format(channel_interval))
                 print('>> Restriction for channels set to {}.'.format(indices))
@@ -104,7 +105,7 @@ class PVdata(object):
                     j = indices['min']
                     dj = 1
             # iteration over channels for the current position i
-            while pos[j] < threshold * self.noise and j % self.data.shape[0] != self.vLSR_channel:
+            while pos[j] < threshold * self.noise and j % self.data.shape[0] != indices['central']:
                 j += dj
             if j == self.vLSR_channel:
                 self.channels.mask[i] = True
@@ -113,7 +114,7 @@ class PVdata(object):
 
         # for safety repeat flagging if channels equal to v_LSR
         for position, channel in enumerate(self.channels):
-            if channel == self.vLSR_channel:
+            if channel == indices['min'] or channel == indices['max'] or channel == indices['central']:
                 self.channels.mask[position] = True
 
         # plot
@@ -218,6 +219,7 @@ def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
 def model_Keplerian(self, threshold, source_distance,
                     return_stddevs=True, print_results=False, plot=False,
                     flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
+                    verbose=True,
                     **kwargs):
 
     """
@@ -315,7 +317,12 @@ def model_Keplerian(self, threshold, source_distance,
     with warnings.catch_warnings():
         # Catching RuntimeWarnings turning them to errors
         warnings.simplefilter('error')
-        best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
+        try:
+            best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
+        except astropy.utils.exceptions.AstropyUserWarning as e:
+            print(e)
+            print("fit_info['message']:")
+            print(fit_method.fit_info['message'])
 
     # estimate chi2
     fdata = best_fit(xdata)
@@ -350,6 +357,8 @@ def model_Keplerian(self, threshold, source_distance,
                 print('Catched the following error, which is due to an unsucessful fit (covariance matrix is {}):'.format(covariance))
                 print('ValueError: {}'.format(e))
             return best_fit, chi2
+    if verbose:
+        print(fit_method.fit_info['message'])
     if print_results:
         pass
     return best_fit, chi2
