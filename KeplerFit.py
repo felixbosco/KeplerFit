@@ -64,14 +64,19 @@ class PVdata(object):
 
 
     # Seifried et al. (2016) algorithm
-    def start_low(self, indices={'min': 0, 'max': -1}, weak_quadrants=False):
-        low = np.sum(self.data[indices['min']:self.vLSR_channel, :self.position_reference]) + \
-                np.sum(self.data[self.vLSR_channel:indices['max'], self.position_reference:])
-        high = np.sum(self.data[indices['min']:self.vLSR_channel, self.position_reference:]) + \
-                np.sum(self.data[self.vLSR_channel:indices['max'], :self.position_reference])
+    def start_low(self, indices=None, weak_quadrants=False):
+        if indices is None:
+            indices = {'min': 0, 'max': -1, 'central': self.vLSR_channel}
+        low = np.sum(self.data[indices['min']:indices['central'], :self.position_reference]) + \
+                np.sum(self.data[indices['central']:indices['max'], self.position_reference:])
+        high = np.sum(self.data[indices['min']:indices['central'], self.position_reference:]) + \
+                np.sum(self.data[indices['central']:indices['max'], :self.position_reference])
+        #print('low', low, 'high', high)
         if not weak_quadrants:
+            #print('Starting low...')
             return low > high
         else:
+            #print('Starting high...')
             return low < high
 
 
@@ -219,7 +224,7 @@ def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
 def model_Keplerian(self, threshold, source_distance,
                     return_stddevs=True, print_results=False, plot=False,
                     flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
-                    verbose=True,
+                    debug=False,
                     **kwargs):
 
     """
@@ -249,33 +254,22 @@ def model_Keplerian(self, threshold, source_distance,
     chi2 (float): chi-squared residual of the fit to the unflagged data.
     """
 
-    # initialize the model
-    if 'model_kwargs' in kwargs:
-        model_kwargs = kwargs['model_kwargs']
-    else:
-        model_kwargs = {}
-
-    if self.start_low(weak_quadrants=weak_quadrants):
-        init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
-    else:
-        init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)}, **model_kwargs)
-
     # compute the velocity table
     if 'velocity_interval' in kwargs:
-        # if isinstance(velocity_interval, tuple):
-        #     channel_interval = self.__velocity_to_channel(velocity_interval)
-        # elif isinstance(velocity_interval, list):
-        #     channel_interval = []
-        #     for velocity_interval_tuple in velocity_interval:
-        #         channel_interval.append(self.__velocity_to_channel(velocity_interval_tuple))
+        velocity_interval = kwargs['velocity_interval']
+        channel_interval = self.__velocity_to_channel(velocity_interval)
+        indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
                                          velocity_interval=kwargs['velocity_interval'])
     elif 'channel_interval' in kwargs:
+        channel_interval = kwargs['channel_interval']
+        indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
                                          channel_interval=kwargs['channel_interval'])
     else:
+        indices = None
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants)
 
@@ -312,6 +306,11 @@ def model_Keplerian(self, threshold, source_distance,
         else:
             print('>> Flagged {} elements.'.format(len(np.unique(flagged))))
 
+    # choose and initialize the fit model
+    if not self.start_low(indices=indices, weak_quadrants=weak_quadrants):
+        init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+    else:
+        init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
 
     # model
     with warnings.catch_warnings():
@@ -337,6 +336,8 @@ def model_Keplerian(self, threshold, source_distance,
         plt.axhline(self.vLSR.value, c='k', ls='--', label='$v_\mathrm{LSR}$')
         plt.plot(xdata, best_fit(xdata), label='model')
         plt.fill_between(xdata, best_fit(xdata), best_fit.v0, facecolor='tab:orange', alpha=.5)
+        if debug:
+            plt.plot(xdata, init(xdata), label='init')
         plt.grid()
         plt.legend()
         plt.show()
@@ -357,7 +358,7 @@ def model_Keplerian(self, threshold, source_distance,
                 print('Catched the following error, which is due to an unsucessful fit (covariance matrix is {}):'.format(covariance))
                 print('ValueError: {}'.format(e))
             return best_fit, chi2
-    if verbose:
+    if debug:
         print(fit_method.fit_info['message'])
     if print_results:
         pass
