@@ -1,6 +1,6 @@
 ### KeplerFit
 # Author: F. Bosco (Max Planck Institute for Astronomy, Heidelberg)
-# Last edited: 12/12/2018
+# Last edited: 09/01/2019
 # Description: A small piece of code to fit a Keplerian velocity distribution model to position-velocity data
 
 
@@ -71,12 +71,9 @@ class PVdata(object):
                 np.sum(self.data[indices['central']:indices['max'], self.position_reference:])
         high = np.sum(self.data[indices['min']:indices['central'], self.position_reference:]) + \
                 np.sum(self.data[indices['central']:indices['max'], :self.position_reference])
-        #print('low', low, 'high', high)
         if not weak_quadrants:
-            #print('Starting low...')
             return low > high
         else:
-            #print('Starting high...')
             return low < high
 
 
@@ -91,6 +88,7 @@ class PVdata(object):
                 raise TypeError('The function estimate_extreme_channels() can only handle a single channel interval at a time but got {}!'.format(channel_interval))
                 print('>> Restriction for channels set to {}.'.format(indices))
         self.channels = np.ma.masked_array(np.zeros(self.data.shape[1]), mask=np.zeros(self.data.shape[1], dtype=bool))
+        print('Indices are {}.'.format(indices))
 
         # iteration over position coordinate
         for i, pos in enumerate(self.data.transpose()):
@@ -135,16 +133,16 @@ class PVdata(object):
         return self.channels
 
 
-    def __angle_to_length(self, angle, distance):
+    def _angle_to_length(self, angle, distance):
         return (angle.to(u.arcsec)).value * (distance.to(u.pc)).value * u.AU
 
 
-    def __velocity_to_channel(self, velocity_tuple):
+    def _velocity_to_channel(self, velocity_tuple):
         channel_tuple = []
         for velocity in velocity_tuple:
             channel = int((velocity - self.vLSR) / self.velocity_resolution) + self.vLSR_channel
             channel_tuple.append(channel)
-        channel_tuple = tuple(channel_tuple)
+        channel_tuple = (np.min(channel_tuple), np.max(channel_tuple))
         print('>> Transfering the velocity interval {} into the channel interval {}, using the PV attributes:'.format(velocity_tuple, channel_tuple))
         print({'vLSR': self.vLSR, 'v resolution': self.velocity_resolution, 'vLSR channel': self.vLSR_channel})
         return channel_tuple
@@ -160,7 +158,7 @@ class PVdata(object):
             #print('The handling of velocity intervals is not supported yet. Try channel_intervals...')
             velocity_interval = kwargs['velocity_interval']
             if isinstance(velocity_interval, tuple):
-                channel_interval = self.__velocity_to_channel(velocity_interval)
+                channel_interval = self._velocity_to_channel(velocity_interval)
             else:
                 raise TypeError('The function estimate_extreme_velocities() can only handle a single velocity interval at a time but got {}!'.format(velocity_interval))
             self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=channel_interval)
@@ -172,7 +170,7 @@ class PVdata(object):
         # transfer the channels into physical units
         for position, channel in enumerate(self.channels):
             angular_distance = (position - self.position_reference) * self.position_resolution
-            distance = self.__angle_to_length(angular_distance, source_distance)
+            distance = self._angle_to_length(angular_distance, source_distance)
             velocity = (channel - self.vLSR_channel) * self.velocity_resolution + self.vLSR
             try:
                 self.table.add_row([position, channel, angular_distance.value, distance.value, velocity.value])
@@ -257,7 +255,7 @@ def model_Keplerian(self, threshold, source_distance,
     # compute the velocity table
     if 'velocity_interval' in kwargs:
         velocity_interval = kwargs['velocity_interval']
-        channel_interval = self.__velocity_to_channel(velocity_interval)
+        channel_interval = self._velocity_to_channel(velocity_interval)
         indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
