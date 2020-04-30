@@ -74,7 +74,23 @@ class PVdata(object):
             self.vLSR_channel = 16
 
     # Seifried et al. (2016) algorithm
-    def start_low(self, indices=None, weak_quadrants=False, debug=False):
+    def start_low(self, indices=None, weak_quadrants=False):
+        """Compare the flux in the four quadrants.
+
+        Args:
+            indices (dict, optional):
+                Index dictionary with entries for min, max and central pixel. If none, than fall back values are
+                applied.
+            weak_quadrants (bool, optional):
+                Invert return value.
+
+        Returns:
+            start_low(bool):
+                True, if the flux in the pair of quadrants that contains low velocities at low positions is larger than
+                the flux of the other two quadrants.
+        """
+
+        # Apply fall back values
         if indices is None:
             indices = {'min': 0, 'max': -1, 'central': self.vLSR_channel}
 
@@ -321,7 +337,7 @@ def model_Keplerian(self, threshold, source_distance,
             print('>> Flagged {} elements.'.format(len(np.unique(flagged))))
 
     # choose and initialize the fit model
-    if not self.start_low(indices=indices, weak_quadrants=weak_quadrants, debug=debug):
+    if self.start_low(indices=indices, weak_quadrants=weak_quadrants):
         init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
     else:
         init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
