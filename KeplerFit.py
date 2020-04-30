@@ -70,21 +70,24 @@ class PVdata(object):
         self.vLSR = (hdr['CRVAL2'] * u.m).to(u.km) / u.s
         self.velocity_resolution = (hdr['CDELT2'] * u.m).to(u.km) / u.s
         self.vLSR_channel = int(hdr['CRPIX2'] - 1) # convert from 1-based to 0-based counting
-
-        # embed()
+        if debug:
+            self.vLSR_channel = 16
 
     # Seifried et al. (2016) algorithm
-    def start_low(self, indices=None, weak_quadrants=False):
+    def start_low(self, indices=None, weak_quadrants=False, debug=False):
         if indices is None:
             indices = {'min': 0, 'max': -1, 'central': self.vLSR_channel}
-        low = np.sum(self.data[indices['min']:indices['central'], :self.position_reference]) + \
-                np.sum(self.data[indices['central']:indices['max'], self.position_reference:])
-        high = np.sum(self.data[indices['min']:indices['central'], self.position_reference:]) + \
-                np.sum(self.data[indices['central']:indices['max'], :self.position_reference])
+
+        # Estimate total flux of quadrants
+        q1 = np.sum(self.data[self.position_reference:, indices['central']:indices['max']])  # +x, +v
+        q2 = np.sum(self.data[:self.position_reference, indices['central']:indices['max']])  # -x, +v
+        q3 = np.sum(self.data[:self.position_reference, indices['min']:indices['central']])  # -x, -v
+        q4 = np.sum(self.data[self.position_reference:, indices['min']:indices['central']])  # +x, -v
+
         if not weak_quadrants:
-            return low > high
+            return q1 + q3 > q2 + q4
         else:
-            return low < high
+            return q1 + q3 < q2 + q4
 
     def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, channel_interval=None):
         # initialize
@@ -318,21 +321,22 @@ def model_Keplerian(self, threshold, source_distance,
             print('>> Flagged {} elements.'.format(len(np.unique(flagged))))
 
     # choose and initialize the fit model
-    if not self.start_low(indices=indices, weak_quadrants=weak_quadrants):
+    if not self.start_low(indices=indices, weak_quadrants=weak_quadrants, debug=debug):
         init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
     else:
         init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
 
     # model
-    with warnings.catch_warnings():
-        # Catching RuntimeWarnings turning them to errors
-        warnings.simplefilter('error')
-        try:
-            best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
-        except AstropyUserWarning as e:
-            print(e)
-            print("fit_info['message']:")
-            print(fit_method.fit_info['message'])
+    # with warnings.catch_warnings():
+    #     # Catching RuntimeWarnings turning them to errors
+    #     warnings.simplefilter('error')
+    #     try:
+    #         best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
+    #     except AstropyUserWarning as e:
+    #         print(e)
+    #         print("fit_info['message']:")
+    #         print(fit_method.fit_info['message'])
+    best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
 
     # estimate chi2
     fdata = best_fit(xdata)
