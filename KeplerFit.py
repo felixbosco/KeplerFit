@@ -176,22 +176,21 @@ class PVdata(object):
         print({'vLSR': self.vLSR, 'v resolution': self.velocity_resolution, 'vLSR channel': self.vLSR_channel})
         return channel_tuple
 
-    def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False, **kwargs):
+    def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False,
+                                    velocity_interval=None, channel_interval=None):
         # initialize the data table
         self.table = QTable(names=('Position', 'Channel', 'Angular distance', 'Distance', 'Velocity'),
-                           dtype=(int, int, u.Quantity, u.Quantity, u.Quantity))
+                            dtype=(int, int, u.Quantity, u.Quantity, u.Quantity))
 
         # estimate the extreme channels
-        if 'velocity_interval' in kwargs:
-            #print('The handling of velocity intervals is not supported yet. Try channel_intervals...')
-            velocity_interval = kwargs['velocity_interval']
+        if velocity_interval is not None:
             if isinstance(velocity_interval, tuple):
                 channel_interval = self._velocity_to_channel(velocity_interval)
             else:
                 raise TypeError('The function estimate_extreme_velocities() can only handle a single velocity interval at a time but got {}!'.format(velocity_interval))
             self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=channel_interval)
-        elif 'channel_interval' in kwargs:
-            self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=kwargs['channel_interval'])
+        elif channel_interval is not None:
+            self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants, channel_interval=channel_interval)
         else:
             self.estimate_extreme_channels(threshold, plot=False, weak_quadrants=weak_quadrants)
 
@@ -250,8 +249,7 @@ def model_Keplerian(self, threshold, source_distance,
                     flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
                     velocity_interval=None, channel_interval=None,
                     flag_radius=None, flag_intervals=None,
-                    debug=False,
-                    **kwargs):
+                    debug=False):
 
     """Model a keplerian profile to PVdata.
 
@@ -285,16 +283,12 @@ def model_Keplerian(self, threshold, source_distance,
     """
 
     # compute the velocity table
-    # if 'velocity_interval' in kwargs:
-    #     velocity_interval = kwargs['velocity_interval']
     if velocity_interval is not None:
         channel_interval = self._velocity_to_channel(velocity_interval)
         indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
                                          velocity_interval=velocity_interval)
-    # elif 'channel_interval' in kwargs:
-    #     channel_interval = kwargs['channel_interval']
     elif channel_interval is not None:
         indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
