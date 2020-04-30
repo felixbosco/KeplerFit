@@ -6,9 +6,11 @@
 # Description: A small piece of code to fit a Keplerian velocity distribution model to position-velocity data
 #
 
+from IPython import embed
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
+
 from astropy import constants as const
 from astropy.io import fits, ascii
 from astropy import units as u
@@ -21,7 +23,7 @@ from astropy.modeling.fitting import LevMarLSQFitter
 # Definition of the principal class
 class PVdata(object):
 
-    def __init__(self, filename, noise=None, position_reference=None):
+    def __init__(self, filename, noise=None, position_reference=None, debug=False):
 
         """Create a PVdata instance.
 
@@ -35,13 +37,19 @@ class PVdata(object):
                 Position of the central massive object. By default, the central position is used.
         """
 
-        # read fits file
-        with fits.open(filename) as hdulist:
-            hdr = hdulist[0].header
-            data = hdulist[0].data[0, 0]
-            if np.isnan(data).any():
-                print('Masking invalid data...')
-                data = np.ma.masked_invalid(data)
+        # Read fits file
+        data, hdr = fits.getdata(filename=filename, header=True)
+
+        # Remove empty dimensions and mask invalid entries
+        if debug:
+            print('Input data shape:', data.shape)
+        data = np.squeeze(data)
+        if np.isnan(data).any():
+            print('Masking invalid data...')
+            data = np.ma.masked_invalid(data)
+        if debug:
+            print('Data shape:', data.shape)
+
         self.data = data
         self.data_unit = u.Unit(hdr['BUNIT'])
         if noise is None:
@@ -62,6 +70,8 @@ class PVdata(object):
         self.vLSR = (hdr['CRVAL2'] * u.m).to(u.km) / u.s
         self.velocity_resolution = (hdr['CDELT2'] * u.m).to(u.km) / u.s
         self.vLSR_channel = int(hdr['CRPIX2'] - 1) # convert from 1-based to 0-based counting
+
+        # embed()
 
     # Seifried et al. (2016) algorithm
     def start_low(self, indices=None, weak_quadrants=False):
@@ -85,7 +95,6 @@ class PVdata(object):
             else:
                 raise TypeError('The function estimate_extreme_channels() can only handle a single channel interval at a time but got {}!'.format(channel_interval))
                 print('>> Restriction for channels set to {}.'.format(indices))
-        embed()
         self.channels = np.ma.masked_array(np.zeros(self.data.shape[1]), mask=np.zeros(self.data.shape[1], dtype=bool))
         print('Indices are {}.'.format(indices))
 
