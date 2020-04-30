@@ -22,16 +22,16 @@ class PVdata(object):
 
     def __init__(self, filename, noise=None, position_reference=None):
 
-        """
-        # Arguments
-        filename (str): File name of the .fits file to initialize from.
+        """Create a PVdata instance.
 
-        #Optional keyword arguments:
-        noise (float/ astropy.units.Quantity): Noise of the data, required for
-            the threshold of the extreme velocities. By default the standard
-            deviation of the data is used.
-        position_reference (int): Position of the central massive object. By
-            default, the central position is used.
+        Args:
+            filename (str):
+                File name of the .fits file to initialize from.
+            noise (float/ astropy.units.Quantity, optional):
+                Noise of the data, required for the threshold of the extreme velocities. By default the standard
+                deviation of the data is used.
+            position_reference (int, optional):
+                Position of the central massive object. By default, the central position is used.
         """
 
         # read fits file
@@ -225,31 +225,35 @@ def model_Keplerian(self, threshold, source_distance,
                     debug=False,
                     **kwargs):
 
-    """
-    # Arguments
-    threshold (int/ float): Set as multiples of PVdata.noise (for instance
-        3sigma)
-    source_distance (astropy.units.quantity):
+    """Model a keplerian profile to PVdata.
 
-    # Keyword arguments
-    return_stddevs (boolean): The fit method LevMarLSQFitter is able to return
-        the standard deviation of the fit parameters. Default is True.
-    print_results (boolean): If True, the fit parameters will be displayed to
-        the terminal.
-    plot (boolean): If True, the fit will be displayed as a matplotlib pyplot.
+    Args:
+        threshold (int/ float):
+            Set as multiples of PVdata.noise (for instance 3sigma)
+        source_distance (astropy.units.quantity):
+            .
+        return_stddevs (boolean, optional):
+            The fit method LevMarLSQFitter is able to return the standard deviation of the fit parameters. Default is
+            True.
+        print_results (boolean, optional):
+            If True, the fit parameters will be displayed to the terminal.
+        plot (boolean, optional):
+        If True, the fit will be displayed as a matplotlib pyplot.
 
     #Optional keyword arguments:
-    flag_radius (astropy.units.Quantity): If given, then all data points within
-        this given radius from the position_reference are flagged.
-    flag_intervals (list of tupels of astropy.units.Quantity): Similar to
-        flag_radius, but arbitrary intervals may be flagged. Each interval is
-        given as a tuple of two radial distances from the position_reference.
+        flag_radius (astropy.units.Quantity, optional):
+            If given, then all data points within this given radius from the position_reference are flagged.
+        flag_intervals (list of tupels of astropy.units.Quantity, optional):
+            Similar to flag_radius, but arbitrary intervals may be flagged. Each interval is
+            given as a tuple of two radial distances from the position_reference.
 
-    # Returns:
-    best_fit (astropy.modelling.models.custom_model):
-    stddevs (numpy.array): Only if return_stddevs is True. The array entries
-        correspond to the best_fit instance parameters in the same order.
-    chi2 (float): chi-squared residual of the fit to the unflagged data.
+    Returns:
+        best_fit (astropy.modelling.models.custom_model):
+        stddevs (numpy.array):
+            Only if return_stddevs is True. The array entries correspond to the best_fit instance parameters in the
+            same order.
+        chi2 (float):
+            chi-squared residual of the fit to the unflagged data.
     """
 
     # compute the velocity table
