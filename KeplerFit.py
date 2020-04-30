@@ -23,18 +23,21 @@ from astropy.modeling.fitting import LevMarLSQFitter
 # Definition of the principal class
 class PVdata(object):
 
-    def __init__(self, filename, noise=None, position_reference=None, debug=False):
+    def __init__(self, filename, noise=None, position_reference=None, velocity_reference=None, debug=False):
 
         """Create a PVdata instance.
 
         Args:
             filename (str):
                 Name of the FITS file to initialize from.
-            noise (float/ astropy.units.Quantity, optional):
+            noise (float or astropy.units.Quantity, optional):
                 Noise of the data, required for the threshold of the extreme velocities. By default the standard
                 deviation of the data is used.
             position_reference (int, optional):
-                Position of the central massive object. By default, the central position is used.
+                Index reference of the zero position, the central object. Overwrites the parameter extracted from the
+                FITS header.
+            velocity_reference (int, optional):
+                Index reference of the zero velocity, the vLSR. Overwrites the parameter extracted from the FITS header.
         """
 
         # Read FITS file
@@ -61,21 +64,20 @@ class PVdata(object):
                 self.noise = noise
 
         # Read coordinate system parameters from FITS header
+        self.position_reference = int(hdr['CRPIX1'])
         self.position_resolution = u.Quantity(f"{hdr['CDELT1']} {hdr['CUNIT1']}")
         if self.position_resolution.value < 0.0:
             print('Shifting the position increment to positive value...')
             self.position_resolution = np.abs(self.position_resolution.value) * self.position_resolution.unit
-        if position_reference is None:
-            self.position_reference = int(hdr['NAXIS1'] / 2)
-        else:
-            self.position_reference = position_reference
-
+        self.vLSR_channel = int(hdr['CRPIX2'])
         self.vLSR = u.Quantity(f"{hdr['CRVAL2']} {hdr['CUNIT2']}").to('km/ s')
         self.velocity_resolution = u.Quantity(f"{hdr['CDELT2']} {hdr['CUNIT2']}").to('km/ s')
-        self.vLSR_channel = int(hdr['CRPIX2'] - 1)  # convert from 1-based to 0-based counting
 
-        if debug:
-            self.vLSR_channel = 16
+        # Overwrite position and velocity reference indices
+        if position_reference is not None:
+            self.position_reference = position_reference
+        if velocity_reference is not None:
+            self.vLSR_channel = velocity_reference
 
     # Seifried et al. (2016) algorithm
     def start_low(self, indices=None, weak_quadrants=False):
@@ -220,6 +222,7 @@ class PVdata(object):
             plt.close()
 
         if debug:
+            print('Estimates of extreme velocities:')
             print(table)
 
         if writeto:
