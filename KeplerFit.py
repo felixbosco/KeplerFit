@@ -1,10 +1,11 @@
-### KeplerFit
+# KeplerFit
+#
 # Author: F. Bosco (Max Planck Institute for Astronomy, Heidelberg)
-# Last edited: 09/01/2019
+# Last major update: 09/01/2019
+# Last edited: 30/04/2020
 # Description: A small piece of code to fit a Keplerian velocity distribution model to position-velocity data
+#
 
-
-# import
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
@@ -17,7 +18,7 @@ from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter
 
 
-# central class definition
+# Definition of the principal class
 class PVdata(object):
 
     def __init__(self, filename, noise=None, position_reference=None):
@@ -62,7 +63,6 @@ class PVdata(object):
         self.velocity_resolution = (hdr['CDELT2'] * u.m).to(u.km) / u.s
         self.vLSR_channel = int(hdr['CRPIX2'] - 1) # convert from 1-based to 0-based counting
 
-
     # Seifried et al. (2016) algorithm
     def start_low(self, indices=None, weak_quadrants=False):
         if indices is None:
@@ -75,7 +75,6 @@ class PVdata(object):
             return low > high
         else:
             return low < high
-
 
     def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, **kwargs):
         # initialize
@@ -132,10 +131,8 @@ class PVdata(object):
         # return
         return self.channels
 
-
     def _angle_to_length(self, angle, distance):
         return (angle.to(u.arcsec)).value * (distance.to(u.pc)).value * u.AU
-
 
     def _velocity_to_channel(self, velocity_tuple):
         channel_tuple = []
@@ -146,7 +143,6 @@ class PVdata(object):
         print('>> Transfering the velocity interval {} into the channel interval {}, using the PV attributes:'.format(velocity_tuple, channel_tuple))
         print({'vLSR': self.vLSR, 'v resolution': self.velocity_resolution, 'vLSR channel': self.vLSR_channel})
         return channel_tuple
-
 
     def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False, **kwargs):
         # initialize the data table
@@ -193,7 +189,6 @@ class PVdata(object):
             plt.close()
         return self.table
 
-
     def write_table(self, filename, x_offset=None, x_unit=u.arcsec):
         x = self.table['Angular distance']
         x = x.to(x_unit)
@@ -204,19 +199,18 @@ class PVdata(object):
         ascii.write(t, output=filename, overwrite=True)
 
 
-
-
-# other functions
-# Modelling
+# Models
 @custom_model
 def Keplerian1D(x, mass=1., v0=0., r0=0.):
     v = np.sign(x - r0) * np.sqrt(const.G * mass * const.M_sun / np.abs(x - r0) / u.AU).to(u.km/u.s).value + v0
     return v
 
+
 @custom_model
 def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
     v = -1*np.sign(x - r0) * np.sqrt(const.G * mass * const.M_sun / np.abs(x - r0) / u.AU).to(u.km/u.s).value + v0
     return v
+
 
 # Main function
 def model_Keplerian(self, threshold, source_distance,
