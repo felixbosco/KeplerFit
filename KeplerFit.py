@@ -76,11 +76,10 @@ class PVdata(object):
         else:
             return low < high
 
-    def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, **kwargs):
+    def estimate_extreme_channels(self, threshold, plot=False, weak_quadrants=False, channel_interval=None):
         # initialize
         indices = {'min': 0, 'max': -1, 'central': self.vLSR_channel}
-        if 'channel_interval' in kwargs:
-            channel_interval = kwargs['channel_interval']
+        if channel_interval is not None:
             if isinstance(channel_interval, tuple):
                 indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
             else:
@@ -216,6 +215,8 @@ def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
 def model_Keplerian(self, threshold, source_distance,
                     return_stddevs=True, print_results=False, plot=False,
                     flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
+                    velocity_interval=None, channel_interval=None,
+                    flag_radius=None, flag_intervals=None,
                     debug=False,
                     **kwargs):
 
@@ -251,19 +252,21 @@ def model_Keplerian(self, threshold, source_distance,
     """
 
     # compute the velocity table
-    if 'velocity_interval' in kwargs:
-        velocity_interval = kwargs['velocity_interval']
+    # if 'velocity_interval' in kwargs:
+    #     velocity_interval = kwargs['velocity_interval']
+    if velocity_interval is not None:
         channel_interval = self._velocity_to_channel(velocity_interval)
         indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
-                                         velocity_interval=kwargs['velocity_interval'])
-    elif 'channel_interval' in kwargs:
-        channel_interval = kwargs['channel_interval']
+                                         velocity_interval=velocity_interval)
+    # elif 'channel_interval' in kwargs:
+    #     channel_interval = kwargs['channel_interval']
+    elif channel_interval is not None:
         indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
                                          plot=False, weak_quadrants=weak_quadrants,
-                                         channel_interval=kwargs['channel_interval'])
+                                         channel_interval=channel_interval)
     else:
         indices = None
         self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
@@ -278,16 +281,18 @@ def model_Keplerian(self, threshold, source_distance,
         xdata.mask[i] = True
         ydata.mask[i] = True
         print('>> Flagged the elements {}.'.format(i))
-    if 'flag_radius' in kwargs:
-        flag_radius = kwargs['flag_radius']
+    # if 'flag_radius' in kwargs:
+    #     flag_radius = kwargs['flag_radius']
+    if flag_radius is not None:
         print('Flagging towards a radial distance of {}:'.format(flag_radius))
         flag_radius = flag_radius.to(u.AU).value
         i = np.where(np.abs(self.table['Distance'].value) < flag_radius)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
         print('>> Flagged the elements {}.'.format(i))
-    if 'flag_intervals' in kwargs:
-        flag_intervals = kwargs['flag_intervals']
+    # if 'flag_intervals' in kwargs:
+    #     flag_intervals = kwargs['flag_intervals']
+    if flag_intervals is not None:
         print('Flagging intervals:')
         flagged = np.empty(shape=(0,), dtype=int)
         for interval in flag_intervals:
