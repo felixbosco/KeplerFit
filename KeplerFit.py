@@ -70,8 +70,8 @@ class PVdata(object):
         else:
             self.position_reference = position_reference
 
-        self.vLSR = u.Quantity(f"{hdr['CRVAL2']} {hdr['CUNIT2']}")
-        self.velocity_resolution = u.Quantity(f"{hdr['CDELT2']} {hdr['CUNIT2']}")
+        self.vLSR = u.Quantity(f"{hdr['CRVAL2']} {hdr['CUNIT2']}").to('km/ s')
+        self.velocity_resolution = u.Quantity(f"{hdr['CDELT2']} {hdr['CUNIT2']}").to('km/ s')
         self.vLSR_channel = int(hdr['CRPIX2'] - 1)  # convert from 1-based to 0-based counting
 
         if debug:
@@ -177,9 +177,9 @@ class PVdata(object):
         return channel_tuple
 
     def estimate_extreme_velocities(self, threshold, source_distance, plot=False, weak_quadrants=False,
-                                    velocity_interval=None, channel_interval=None):
+                                    velocity_interval=None, channel_interval=None, writeto=None, debug=False):
         # initialize the data table
-        self.table = QTable(names=('Position', 'Channel', 'Angular distance', 'Distance', 'Velocity'),
+        table = QTable(names=('Position', 'Channel', 'Angular distance', 'Distance', 'Velocity'),
                             dtype=(int, int, u.Quantity, u.Quantity, u.Quantity))
 
         # estimate the extreme channels
@@ -200,34 +200,32 @@ class PVdata(object):
             distance = self._angle_to_length(angular_distance, source_distance)
             velocity = (channel - self.vLSR_channel) * self.velocity_resolution + self.vLSR
             try:
-                self.table.add_row([position, channel, angular_distance.value, distance.value, velocity.value])
+                table.add_row([position, channel, angular_distance.value, distance.value, velocity.value])
             except AttributeError:
-                #print([position, channel, angular_distance, distance, velocity])
+                # print([position, channel, angular_distance, distance, velocity])
                 pass
-        self.table['Angular distance'] = self.table['Angular distance']  * self.position_resolution.unit
-        self.table['Distance'] = self.table['Distance'] * u.AU
-        self.table['Velocity'] = self.table['Velocity'] * self.velocity_resolution.unit
+        table['Angular distance'] = table['Angular distance']  * self.position_resolution.unit
+        table['Distance'] = table['Distance'] * u.AU
+        table['Velocity'] = table['Velocity'] * self.velocity_resolution.unit
 
         # plot
         if plot:
-            plt.plot(self.table['Distance'], self.table['Velocity'], 'o', label='data')
-            plt.xlabel('Position offest ({})'.format(self.table['Distance'].unit))
-            plt.xlabel('Velocity ({})'.format(self.table['Velocity'].unit))
+            plt.plot(table['Distance'], table['Velocity'], 'o', label='data')
+            plt.xlabel('Position offest ({})'.format(table['Distance'].unit))
+            plt.xlabel('Velocity ({})'.format(table['Velocity'].unit))
             plt.axhline(self.vLSR.value, c='k', ls='--', label='$v_\mathrm{LSR}$')
             plt.grid()
             plt.legend()
             plt.show()
             plt.close()
-        return self.table
 
-    def write_table(self, filename):
-        """Write data to an ascii file.
+        if debug:
+            print(table)
 
-        Args:
-            filename (str):
-                Name of the file to write to.
-        """
-        self.table.write(filename, format='ascii.fixed_width', overwrite=True)
+        if writeto:
+            table.write(writeto, format='ascii.fixed_width', overwrite=True)
+
+        return table
 
 
 # Models
@@ -245,10 +243,10 @@ def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
 
 # Main function
 def model_Keplerian(self, threshold, source_distance,
-                    return_stddevs=True, print_results=False, plot=False,
+                    return_stddevs=True, plot=False,
                     flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
                     velocity_interval=None, channel_interval=None,
-                    flag_radius=None, flag_intervals=None,
+                    flag_radius=None, flag_intervals=None, write_table_to=None,
                     debug=False):
 
     """Model a keplerian profile to PVdata.
@@ -257,21 +255,19 @@ def model_Keplerian(self, threshold, source_distance,
         threshold (int/ float):
             Set as multiples of PVdata.noise (for instance 3sigma)
         source_distance (astropy.units.quantity):
-            .
+            Distance to the source, which is necessary for computing physical distances.
         return_stddevs (boolean, optional):
             The fit method LevMarLSQFitter is able to return the standard deviation of the fit parameters. Default is
             True.
-        print_results (boolean, optional):
-            If True, the fit parameters will be displayed to the terminal.
         plot (boolean, optional):
-        If True, the fit will be displayed as a matplotlib pyplot.
-
-    #Optional keyword arguments:
+            If True, the fit will be displayed as a matplotlib pyplot.
         flag_radius (astropy.units.Quantity, optional):
             If given, then all data points within this given radius from the position_reference are flagged.
         flag_intervals (list of tupels of astropy.units.Quantity, optional):
             Similar to flag_radius, but arbitrary intervals may be flagged. Each interval is
             given as a tuple of two radial distances from the position_reference.
+        debug (bool, optional):
+            Stream debugging information to the terminal.
 
     Returns:
         best_fit (astropy.modelling.models.custom_model):
@@ -282,49 +278,64 @@ def model_Keplerian(self, threshold, source_distance,
             chi-squared residual of the fit to the unflagged data.
     """
 
-    # compute the velocity table
+    # Compute the velocity table
     if velocity_interval is not None:
         channel_interval = self._velocity_to_channel(velocity_interval)
-        indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
-        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
-                                         plot=False, weak_quadrants=weak_quadrants,
-                                         velocity_interval=velocity_interval)
+        indices = {'min': channel_interval[0],
+                   'max': channel_interval[1],
+                   'central': int((channel_interval[1] + channel_interval[0]) / 2)}
+        table = self.estimate_extreme_velocities(threshold=threshold,
+                                                 source_distance=source_distance,
+                                                 plot=False,
+                                                 weak_quadrants=weak_quadrants,
+                                                 velocity_interval=velocity_interval,
+                                                 writeto=write_table_to,
+                                                 debug=debug)
     elif channel_interval is not None:
-        indices = {'min': channel_interval[0], 'max': channel_interval[1], 'central': int((channel_interval[1] + channel_interval[0]) / 2)}
-        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
-                                         plot=False, weak_quadrants=weak_quadrants,
-                                         channel_interval=channel_interval)
+        indices = {'min': channel_interval[0],
+                   'max': channel_interval[1],
+                   'central': int((channel_interval[1] + channel_interval[0]) / 2)}
+        table = self.estimate_extreme_velocities(threshold=threshold,
+                                                 source_distance=source_distance,
+                                                 plot=False,
+                                                 weak_quadrants=weak_quadrants,
+                                                 channel_interval=channel_interval,
+                                                 writeto=write_table_to,
+                                                 debug=debug)
     else:
         indices = None
-        self.estimate_extreme_velocities(threshold=threshold, source_distance=source_distance,
-                                         plot=False, weak_quadrants=weak_quadrants)
+        table = self.estimate_extreme_velocities(threshold=threshold,
+                                                 source_distance=source_distance,
+                                                 weak_quadrants=weak_quadrants,
+                                                 writeto=write_table_to,
+                                                 debug=debug)
 
-    # flag
-    xdata = np.ma.masked_array(self.table['Distance'].value, np.zeros(self.table['Distance'].shape, dtype=bool))
-    ydata = np.ma.masked_array(self.table['Velocity'].value, np.zeros(self.table['Velocity'].shape, dtype=bool))
+    # Extract xy data from table
+    xdata = table['Distance'].to('au').value
+    ydata = table['Velocity'].to('km/ s').value
+    xdata = np.ma.masked_array(xdata, np.zeros(xdata.shape, dtype=bool))
+    ydata = np.ma.masked_array(ydata, np.zeros(ydata.shape, dtype=bool))
+
+    # Apply flagging masks
     if flag_singularity:
         print('Flagging the singularity:')
-        i = np.where(np.abs(self.table['Distance'].value) < 1e-6)[0]
+        i = np.where(np.abs(table['Distance'].value) < 1e-6)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
-        print('>> Flagged the elements {}.'.format(i))
-    # if 'flag_radius' in kwargs:
-    #     flag_radius = kwargs['flag_radius']
+        print(f">> Flagged the elements {i}.")
     if flag_radius is not None:
         print('Flagging towards a radial distance of {}:'.format(flag_radius))
         flag_radius = flag_radius.to(u.AU).value
-        i = np.where(np.abs(self.table['Distance'].value) < flag_radius)[0]
+        i = np.where(np.abs(table['Distance'].value) < flag_radius)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
-        print('>> Flagged the elements {}.'.format(i))
-    # if 'flag_intervals' in kwargs:
-    #     flag_intervals = kwargs['flag_intervals']
+        print(f">> Flagged the elements {i}.")
     if flag_intervals is not None:
         print('Flagging intervals:')
         flagged = np.empty(shape=(0,), dtype=int)
         for interval in flag_intervals:
-            i1 = np.where(interval[0].value < self.table['Distance'].value)[0]
-            i2 = np.where(self.table['Distance'].value < interval[1].value)[0]
+            i1 = np.where(interval[0].value < table['Distance'].value)[0]
+            i2 = np.where(table['Distance'].value < interval[1].value)[0]
             i = np.intersect1d(i1, i2)
             xdata.mask[i] = True
             ydata.mask[i] = True
@@ -336,37 +347,26 @@ def model_Keplerian(self, threshold, source_distance,
 
     # choose and initialize the fit model
     if self.start_low(indices=indices, weak_quadrants=weak_quadrants):
-        init = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+        model = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
     else:
-        init = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+        model = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
 
-    # model
-    # with warnings.catch_warnings():
-    #     # Catching RuntimeWarnings turning them to errors
-    #     warnings.simplefilter('error')
-    #     try:
-    #         best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
-    #     except AstropyUserWarning as e:
-    #         print(e)
-    #         print("fit_info['message']:")
-    #         print(fit_method.fit_info['message'])
-    best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
+    # Fit the chosen model to the data
+    best_fit = fit_method(model, xdata.compressed(), ydata.compressed())
 
-    # estimate chi2
-    fdata = best_fit(xdata)
-    residuals = fdata - ydata
-    chi2 = np.sum(np.square(residuals))
+    # Estimate chi2
+    chi2 = np.sum(np.square(best_fit(xdata) - ydata))
 
-    # plot
+    # Plot
     if plot:
-        plt.plot(self.table['Distance'], self.table['Velocity'], 'o', label='data')
-        plt.xlabel('Position offest ({})'.format(self.table['Distance'].unit))
-        plt.ylabel('Velocity ({})'.format(self.table['Velocity'].unit))
+        plt.plot(table['Distance'], table['Velocity'], 'o', label='data')
+        plt.xlabel('Position offest ({})'.format(table['Distance'].unit))
+        plt.ylabel('Velocity ({})'.format(table['Velocity'].unit))
         plt.axhline(self.vLSR.value, c='k', ls='--', label='$v_\mathrm{LSR}$')
         plt.plot(xdata, best_fit(xdata), label='model')
         plt.fill_between(xdata, best_fit(xdata), best_fit.v0, facecolor='tab:orange', alpha=.5)
         if debug:
-            plt.plot(xdata, init(xdata), label='init')
+            plt.plot(xdata, model(xdata), label='init')
         plt.grid()
         plt.legend()
         plt.show()
@@ -379,8 +379,6 @@ def model_Keplerian(self, threshold, source_distance,
         covariance = fit_method.fit_info['param_cov']
         try:
             stddevs = np.sqrt(np.diag(covariance))
-            if print_results:
-                pass
             return best_fit, stddevs, chi2
         except ValueError as e:
             if covariance is None:
@@ -389,6 +387,5 @@ def model_Keplerian(self, threshold, source_distance,
             return best_fit, chi2
     if debug:
         print(fit_method.fit_info['message'])
-    if print_results:
-        pass
+
     return best_fit, chi2
