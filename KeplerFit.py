@@ -29,7 +29,7 @@ class PVdata(object):
 
         Args:
             filename (str):
-                File name of the .fits file to initialize from.
+                Name of the FITS file to initialize from.
             noise (float/ astropy.units.Quantity, optional):
                 Noise of the data, required for the threshold of the extreme velocities. By default the standard
                 deviation of the data is used.
@@ -37,7 +37,7 @@ class PVdata(object):
                 Position of the central massive object. By default, the central position is used.
         """
 
-        # Read fits file
+        # Read FITS file
         data, hdr = fits.getdata(filename=filename, header=True)
 
         # Remove empty dimensions and mask invalid entries
@@ -59,7 +59,9 @@ class PVdata(object):
                 self.noise = float(noise / self.data_unit)
             else:
                 self.noise = noise
-        self.position_resolution = (hdr['CDELT1'] * u.deg).to(u.arcsec)
+
+        # Read coordinate system parameters from FITS header
+        self.position_resolution = u.Quantity(f"{hdr['CDELT1']} {hdr['CUNIT1']}")
         if self.position_resolution.value < 0.0:
             print('Shifting the position increment to positive value...')
             self.position_resolution = np.abs(self.position_resolution.value) * self.position_resolution.unit
@@ -67,9 +69,11 @@ class PVdata(object):
             self.position_reference = int(hdr['NAXIS1'] / 2)
         else:
             self.position_reference = position_reference
-        self.vLSR = (hdr['CRVAL2'] * u.m).to(u.km) / u.s
-        self.velocity_resolution = (hdr['CDELT2'] * u.m).to(u.km) / u.s
-        self.vLSR_channel = int(hdr['CRPIX2'] - 1) # convert from 1-based to 0-based counting
+
+        self.vLSR = u.Quantity(f"{hdr['CRVAL2']} {hdr['CUNIT2']}")
+        self.velocity_resolution = u.Quantity(f"{hdr['CDELT2']} {hdr['CUNIT2']}")
+        self.vLSR_channel = int(hdr['CRPIX2'] - 1)  # convert from 1-based to 0-based counting
+
         if debug:
             self.vLSR_channel = 16
 
@@ -217,14 +221,14 @@ class PVdata(object):
             plt.close()
         return self.table
 
-    def write_table(self, filename, x_offset=None, x_unit=u.arcsec):
-        x = self.table['Angular distance']
-        x = x.to(x_unit)
-        if x_offset is not None:
-            x += x_offset
-        y = self.table['Velocity']
-        t = Table([x.value, y.value])
-        ascii.write(t, output=filename, overwrite=True)
+    def write_table(self, filename):
+        """Write data to an ascii file.
+
+        Args:
+            filename (str):
+                Name of the file to write to.
+        """
+        self.table.write(filename, format='ascii.fixed_width', overwrite=True)
 
 
 # Models
