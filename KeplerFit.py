@@ -1,21 +1,17 @@
 # KeplerFit
 #
 # Author: F. Bosco (Max Planck Institute for Astronomy, Heidelberg)
-# Last major update: 09/01/2019
 # Last edited: 30/04/2020
 # Description: A small piece of code to fit a Keplerian velocity distribution model to position-velocity data
 #
 
-from IPython import embed
 import numpy as np
 import matplotlib.pyplot as plt
-import warnings
 
 from astropy import constants as const
-from astropy.io import fits, ascii
+from astropy.io import fits
 from astropy import units as u
-from astropy.utils.exceptions import AstropyUserWarning
-from astropy.table import Table, QTable
+from astropy.table import QTable
 from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter
 
@@ -153,7 +149,7 @@ class PVdata(object):
             if channel == indices['min'] or channel == indices['max'] or channel == indices['central']:
                 self.channels.mask[position] = True
 
-        # plot
+        # Plot
         if plot:
             plt.plot(self.channels, 'o')
             plt.xlim(-1, self.data.shape[1]+1)
@@ -162,7 +158,6 @@ class PVdata(object):
             plt.show()
             plt.close()
 
-        # return
         return self.channels
 
     def _angle_to_length(self, angle, distance):
@@ -234,46 +229,97 @@ class PVdata(object):
 # Models
 @custom_model
 def Keplerian1D(x, mass=1., v0=0., r0=0.):
+    """Computes the keplerian velocity at requested distances.
+
+    Args:
+        x (array_like):
+            Distances to the central object.
+        mass (float, optional):
+            Mass of the central object.
+        v0 (float, optional):
+            Velocity offset or systemic velocity.
+        r0 (float, optional):
+            Position offset, the postition of the central object.
+    Returns:
+        v (np.ndarray):
+            Keplerian velocity at the positions x.
+    """
     v = np.sign(x - r0) * np.sqrt(const.G * mass * const.M_sun / np.abs(x - r0) / u.AU).to(u.km/u.s).value + v0
     return v
 
 
 @custom_model
 def Keplerian1D_neg(x, mass=1., v0=0., r0=0.):
+    """Computes the keplerian velocity at requested distances.
+
+    Args:
+        x (array_like):
+            Distances to the central object.
+        mass (float, optional):
+            Mass of the central object.
+        v0 (float, optional):
+            Velocity offset or systemic velocity.
+        r0 (float, optional):
+            Position offset, the postition of the central object.
+    Returns:
+        v (np.ndarray):
+            Keplerian velocity at the positions x.
+    """
     v = -1*np.sign(x - r0) * np.sqrt(const.G * mass * const.M_sun / np.abs(x - r0) / u.AU).to(u.km/u.s).value + v0
     return v
 
 
 # Main function
 def model_Keplerian(self, threshold, source_distance,
-                    return_stddevs=True, plot=False,
-                    flag_singularity=True, weak_quadrants=False, fit_method=LevMarLSQFitter(),
-                    velocity_interval=None, channel_interval=None,
-                    flag_radius=None, flag_intervals=None, write_table_to=None,
+                    fit_method=LevMarLSQFitter(),
+                    flag_singularity=True,
+                    flag_radius=None,
+                    flag_intervals=None,
+                    velocity_interval=None,
+                    channel_interval=None,
+                    weak_quadrants=False,
+                    return_stddevs=True,
+                    plot=False,
+                    write_table_to=None,
                     debug=False):
 
     """Model a keplerian profile to PVdata.
 
     Args:
+        self (PVdata):
+            PVdata object to compute the data from.
         threshold (int/ float):
             Set as multiples of PVdata.noise (for instance 3sigma)
-        source_distance (astropy.units.quantity):
+        source_distance (any):
             Distance to the source, which is necessary for computing physical distances.
-        return_stddevs (boolean, optional):
-            The fit method LevMarLSQFitter is able to return the standard deviation of the fit parameters. Default is
-            True.
-        plot (boolean, optional):
-            If True, the fit will be displayed as a matplotlib pyplot.
+        fit_method (any, optional):
+            Method to fit the model to the data.
+        flag_singularity (bool, optional):
+            Flag the zero position data points, to avoid running in trouble there during fitting.
         flag_radius (astropy.units.Quantity, optional):
             If given, then all data points within this given radius from the position_reference are flagged.
         flag_intervals (list of tupels of astropy.units.Quantity, optional):
             Similar to flag_radius, but arbitrary intervals may be flagged. Each interval is
             given as a tuple of two radial distances from the position_reference.
+        velocity_interval (any, optional):
+            Velocity interval to restrict the fitting to.
+        channel_interval (any, optional):
+            Channel interval to restrict the fitting to.
+        weak_quadrants (bool, optional):
+            Fit the model to the signal in the weaker opposing quadrants.
+        return_stddevs (boolean, optional):
+            The fit method LevMarLSQFitter is able to return the standard deviation of the fit parameters. Default is
+            True.
+        plot (boolean, optional):
+            If True, the fit will be displayed as a matplotlib pyplot.
+        write_table_to (str, optional):
+            Name of a file to write the data points to, formatted as a table.
         debug (bool, optional):
             Stream debugging information to the terminal.
 
     Returns:
         best_fit (astropy.modelling.models.custom_model):
+            Best fitting model.
         stddevs (numpy.array):
             Only if return_stddevs is True. The array entries correspond to the best_fit instance parameters in the
             same order.
@@ -328,7 +374,7 @@ def model_Keplerian(self, threshold, source_distance,
         print(f">> Flagged the elements {i}.")
     if flag_radius is not None:
         print('Flagging towards a radial distance of {}:'.format(flag_radius))
-        flag_radius = flag_radius.to(u.AU).value
+        flag_radius = flag_radius.to('au').value
         i = np.where(np.abs(table['Distance'].value) < flag_radius)[0]
         xdata.mask[i] = True
         ydata.mask[i] = True
