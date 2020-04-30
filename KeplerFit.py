@@ -9,10 +9,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
-import astropy
-from astropy import units as u
 from astropy import constants as const
 from astropy.io import fits, ascii
+from astropy import units as u
+from astropy.utils.exceptions import AstropyUserWarning
 from astropy.table import Table, QTable
 from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter
@@ -85,6 +85,7 @@ class PVdata(object):
             else:
                 raise TypeError('The function estimate_extreme_channels() can only handle a single channel interval at a time but got {}!'.format(channel_interval))
                 print('>> Restriction for channels set to {}.'.format(indices))
+        embed()
         self.channels = np.ma.masked_array(np.zeros(self.data.shape[1]), mask=np.zeros(self.data.shape[1], dtype=bool))
         print('Indices are {}.'.format(indices))
 
@@ -319,7 +320,7 @@ def model_Keplerian(self, threshold, source_distance,
         warnings.simplefilter('error')
         try:
             best_fit = fit_method(init, xdata.compressed(), ydata.compressed())
-        except astropy.utils.exceptions.AstropyUserWarning as e:
+        except AstropyUserWarning as e:
             print(e)
             print("fit_info['message']:")
             print(fit_method.fit_info['message'])
