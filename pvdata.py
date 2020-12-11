@@ -78,7 +78,7 @@ class PVData(object):
         self.extreme_channels = None
 
     @classmethod
-    def from_file(cls, file_name, extension=None, transpose=False):
+    def from_file(cls, file_name, extension=None, transpose=False, **kwargs):
         """Initialize an object from a FITS file.
 
         Args:
@@ -88,6 +88,9 @@ class PVData(object):
                 Index or name of the desired FITS extension.
             transpose (bool, optional):
                 Transpose the data array, if requested. This can be used if the first axis is not (spatial, velocity).
+
+        Keyword Args:
+            Kwargs will overwrite the parameters extracted from the FITS header.
 
         Returns:
             pv_data (PVData object):
@@ -101,6 +104,9 @@ class PVData(object):
         pars = {}
         for par, card in cls.default_header_keys.items():
             pars[par] = hdr.get(card)
+
+        # Overwrite parameters from FITS header by kwargs
+        pars.update(**kwargs)
 
         return cls(data=data, **pars, transpose=transpose)
 
