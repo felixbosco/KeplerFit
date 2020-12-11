@@ -2,12 +2,12 @@ from IPython import embed
 import matplotlib.pyplot as plt
 import numpy as np
 
-from pvdata import PVData
+from .pvdata import PVData
 
 
 # Parameters
-file = 'tests/23033_H2CO_l08_ABD_MMS1a_120.xy.fits'
-sigma = 3
+file = '23033_H2CO_l08_ABD_MMS1a_120.xy.fits'
+sigma = 4
 
 
 # Initialize
