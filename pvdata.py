@@ -187,8 +187,11 @@ class PVData(object):
         if self.extreme_channels is None:
             self.combine_extreme_channels(weak_quadrants=weak_quadrants)
 
+        # Remove masked values
+        use = self.extreme_channels.mask == 0
+
         # Transform velocity channel indexes into velocities relative to the v_LSR channel
-        velocities = (self.extreme_channels - self.v_lsr_channel).astype(float)
+        velocities = (self.extreme_channels[use] - self.v_lsr_channel).astype(float)
         velocities *= self.d_vel
         velocities += self.v_lsr  # Offset by the v_LSR
         if isinstance(self.vel_unit, str):
@@ -198,7 +201,7 @@ class PVData(object):
             velocities = velocities * Unit('km/ s')
 
         # Transform position indexes into angles relative to the position reference index
-        positions = (np.arange(self.shape[1]) - self.position_reference).astype(float)
+        positions = (np.arange(self.shape[1])[use] - self.position_reference).astype(float)
         positions *= self.d_pos
         if isinstance(self.pos_unit, str):
             positions = positions * Unit(self.pos_unit)
