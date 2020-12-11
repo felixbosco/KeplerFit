@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from astropy import constants as const
-from astropy.io import fits
 from astropy.modeling.models import custom_model
 from astropy.modeling.fitting import LevMarLSQFitter
 from astropy.units import Unit, Quantity
@@ -16,7 +15,7 @@ def Keplerian1D(x, mass=1., v0=0., r0=0.):
         x (array_like):
             Distances to the central object.
         mass (float, optional):
-            Mass of the central object.
+            Mass of the central object in solar masses.
         v0 (float, optional):
             Velocity offset or systemic velocity.
         r0 (float, optional):
@@ -30,9 +29,9 @@ def Keplerian1D(x, mass=1., v0=0., r0=0.):
     return v
 
 
-def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
+def model_keplerian(positions, velocities, v_lsr=None, fit_method=None,
                     flag_singularity=True, flag_radius=None, flag_intervals=None,
-                    weak_quadrants=False, return_stddevs=True, plot=False, debug=False):
+                    return_stddevs=True, plot=False, debug=False):
 
     """Fit a Keplerian velocity profile to position-velocity-data.
 
@@ -52,19 +51,11 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
         flag_intervals (list of tupels of astropy.units.Quantity, optional):
             Similar to flag_radius, but arbitrary intervals may be flagged. Each interval is
             given as a tuple of two radial distances from the position_reference.
-        velocity_interval (any, optional):
-            Velocity interval to restrict the fitting to.
-        channel_interval (any, optional):
-            Channel interval to restrict the fitting to.
-        weak_quadrants (bool, optional):
-            Fit the model to the signal in the weaker opposing quadrants.
         return_stddevs (boolean, optional):
             The fit method LevMarLSQFitter is able to return the standard deviation of the fit parameters. Default is
             True.
         plot (boolean, optional):
             If True, the fit will be displayed as a matplotlib pyplot.
-        write_table_to (str, optional):
-            Name of a file to write the data points to, formatted as a table.
         debug (bool, optional):
             Stream debugging information to the terminal.
 
