@@ -3,12 +3,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pvdata import PVData
+from modeling import model_Keplerian
 
 
 # Parameters
-file = 'tests/23033_H2CO_l08_ABD_MMS1a_120.xy.fits'
+file = 'tests/<your_fits_file>'
 sigma = 3
-distance = 3500.
+distance = 3500.  # in parsec
+v_lsr = -53.1  # in km/ s
 
 
 # Initialize
@@ -23,7 +25,7 @@ plt.imshow(np.ma.masked_less(pv_data.data, sigma * pv_data.noise), origin='lower
 plt.plot(pv_data.min_channels, '^', c='tab:orange', label='min')
 plt.plot(pv_data.max_channels, 'v', c='tab:red', label='max')
 plt.legend()
-plt.show()
+# plt.show()
 plt.close()
 
 # Combine to PV-signal
@@ -33,14 +35,18 @@ pv_data.combine_extreme_channels(weak_quadrants=False)
 plt.imshow(np.ma.masked_less(pv_data.data, sigma * pv_data.noise), origin='lower')
 plt.plot(pv_data.extreme_channels, 'x', c='tab:red', label='extreme')
 plt.legend()
-plt.show()
+# plt.show()
 plt.close()
 
 # Transform into linear units and plot
 positions, velocities = pv_data.estimate_extreme_velocities(distance=distance)
 plt.plot(positions, velocities, 'o', c='k')
-plt.show()
+# plt.show()
+plt.close()
 
+# Model the data
+model_Keplerian(positions=positions, velocities=velocities, v_lsr=v_lsr, flag_radius=100, flag_intervals=[(-700, 0)],
+                plot=True, debug=True)
 
 # Embed for future fun
 # embed()
