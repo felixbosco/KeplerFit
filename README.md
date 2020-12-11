@@ -1,5 +1,6 @@
 # KeplerFit
-A small piece of code to fit a Keplerian velocity distribution model to position-velocity data. Please take a look at the example under **Basic usage**.
+A small piece of code to fit a Keplerian velocity distribution model to position-velocity (PV) data. 
+Please take a look at the example under **Basic usage**.
 
 ## Basic usage
 
@@ -12,7 +13,8 @@ sigma = 3
 v_lsr = -100.  # km/ s
 distance = 2000.  # parsec
 
-pv_data = PVData.from_file('my_pv_data.fits', noise=5.66e-5)
+# Load the PV data from your FITS file
+pv_data = PVData.from_file('your_pv_data.fits', noise=5.66e-5)
 
 # Update parameters that have not been identified correctly from the FITS header
 pv_data.position_reference = pv_data.data.shape[1] // 2 
@@ -42,3 +44,10 @@ results = model_Keplerian(pvdata, 4, source_distance=2.0*u.kpc, return_stddevs=T
                              flag_intervals=[(-10000*u.AU, -3000*u.AU), (3000*u.AU, 10000*u.AU)])
 print(results)
 ```
+
+## Development
+The code was developed by Felix Bosco at the Max Planck Institute for Astronomy (MPIA), Heidelberg
+- 12 December 2020: Published new version of the PVData class 
+- 30 April 2020: Minor bug fixes
+- ...: Minor compatibility bug fixes
+- 12 December 2018: First publication of the code on GitHub
