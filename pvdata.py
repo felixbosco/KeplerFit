@@ -188,23 +188,23 @@ class PVData(object):
             self.combine_extreme_channels(weak_quadrants=weak_quadrants)
 
         # Transform velocity channel indexes into velocities relative to the v_LSR channel
-        velocities = self.extreme_channels - self.v_lsr_channel
+        velocities = (self.extreme_channels - self.v_lsr_channel).astype(float)
         velocities *= self.d_vel
         velocities += self.v_lsr  # Offset by the v_LSR
         if isinstance(self.vel_unit, str):
-            velocities *= Unit(self.vel_unit)
+            velocities = velocities * Unit(self.vel_unit)
             velocities = velocities.to('km/ s')
         else:
-            velocities *= Unit('km/ s')
+            velocities = velocities * Unit('km/ s')
 
         # Transform position indexes into angles relative to the position reference index
-        positions = np.arange(self.shape[1]) - self.position_reference
+        positions = (np.arange(self.shape[1]) - self.position_reference).astype(float)
         positions *= self.d_pos
         if isinstance(self.pos_unit, str):
-            positions *= Unit(self.pos_unit)
+            positions = positions * Unit(self.pos_unit)
             positions = positions.to('arcsec')
         else:
-            positions *= Unit('arcsec')
+            positions = positions * Unit('arcsec')
 
         # Transform angular positions into linear scale if the distance is provided
         if distance is not None:
@@ -212,7 +212,7 @@ class PVData(object):
             if isinstance(distance, Quantity):
                 distance = distance.to('pc')
             else:
-                distance *= Unit('pc')
+                distance = distance * Unit('pc')
 
             positions = positions.value * distance.value * Unit('AU')
 
