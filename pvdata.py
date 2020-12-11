@@ -12,12 +12,12 @@ class PVData(object):
                            'v_lsr_channel': 'CRPIX2',
                            'd_vel': 'CDELT2',
                            'v_lsr': 'CRVAL2',
-                           'v_lsr_unit': 'CUNIT2',
+                           'vel_unit': 'CUNIT2',
                            'data_unit': 'BUNIT'}
 
     def __init__(self, data, noise=None, position_reference=None, v_lsr_channel=None, d_pos=None, d_vel=None,
-                 pos_unit=None, vel_unit=None, v_lsr=None, transpose=False):
-        """Initialize a PVData object:
+                 pos_unit=None, vel_unit=None, data_unit=None, v_lsr=None, transpose=False):
+        """Initialize a position-velocity data (PVData) object:
 
         Args:
             data (np.ndarray):
@@ -100,16 +100,18 @@ class PVData(object):
 
     def estimate_extreme_velocity_channels(self, sigma=3):
 
+        number_channels = self.data.shape[0]
+
         # Mask all pixels with signal < sigma * noise
-        valid_data = np.ma.masked_less(self.data, sigma * self.noise)
+        valid_data = np.ma.masked_greater(self.data, sigma * self.noise).mask
 
         # Estimate channels as first entries with a True value
         min_channels = np.argmax(valid_data, axis=0)
-        max_channels = np.argmax(valid_data[::-1], axis=0)
+        max_channels = number_channels - 1 - np.argmax(valid_data[::-1], axis=0)
 
         # Mask min values larger than v_LSR and max values smaller than v_LSR
-        min_channels = np.ma.masked_greater(min_channels, self.v_lsr_channel)
-        max_channels = np.ma.masked_less(max_channels, self.v_lsr_channel)
+        min_channels = np.ma.masked_values(min_channels, 0)
+        max_channels = np.ma.masked_values(max_channels, number_channels - 1)
 
         # Store results
         self.min_channels = min_channels
