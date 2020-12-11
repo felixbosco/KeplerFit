@@ -97,11 +97,9 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
     # Mask the desired flags and intervals
     if flag_singularity:
         print('Flagging the singularity')
-        xdata = np.ma.masked_less(np.abs(xdata), 1e-6)
-        ydata.mask = np.logical_or(ydata.mask, xdata.mask)
-        # i = np.where(np.abs(positions) < 1e-6)[0]
-        # xdata.mask[i] = True
-        # ydata.mask[i] = True
+        singularity_mask = np.ma.masked_less(np.abs(xdata), 1e-3).mask
+        xdata.mask = np.logical_or(xdata.mask, singularity_mask)
+        ydata.mask = np.logical_or(ydata.mask, singularity_mask)
         print(f">> Done")
     else:
         print("Not masking the singularity")
@@ -110,7 +108,7 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
         print(f"Flagging towards a radial distance of {flag_radius}")
         if isinstance(flag_radius, Quantity):
             flag_radius = flag_radius.to('au').value
-        xdata = np.ma.masked_less(xdata, flag_radius)
+        xdata = np.ma.masked_inside(xdata, -flag_radius, flag_radius)
         ydata.mask = np.logical_or(ydata.mask, xdata.mask)
         print(f">> Done")
         print(f"The mask is {xdata.mask}")
@@ -126,11 +124,11 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
     else:
         print("No flag intervals provided")
 
+    if debug:
+        print('x data:', xdata)
+        print('y data:', ydata)
+
     # Initialize the fit model
-    # if self.start_low(indices=indices, weak_quadrants=weak_quadrants):
-    #     model = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
-    # else:
-    #     model = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
     print("Initializing the model...")
     model = Keplerian1D(mass=10., v0=v_lsr, r0=0, bounds={'mass': (0.0, None)})
     if debug:
@@ -139,6 +137,8 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
     # Fit the chosen model to the data
     print("Fitting the model to the data...")
     best_fit = fit_method(model, xdata.compressed(), ydata.compressed())
+    if debug:
+        print(fit_method.fit_info['message'])
 
     # Estimate chi2
     print("Computing the chi-squared value...")
@@ -147,9 +147,9 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
     # Plot
     if plot:
         plt.plot(positions, velocities, 'o', label='data')
-        plt.xlabel('Position offest (AU)')
+        plt.xlabel('Position offset (AU)')
         plt.ylabel('Velocity (km/ s)')
-        plt.axhline(v_lsr, c='k', ls='--', label='$v_\mathrm{LSR}$')
+        plt.axhline(v_lsr, c='k', ls='--', label=r'$v_\mathrm{LSR}$')
         plt.plot(xdata, best_fit(xdata), label='model')
         plt.fill_between(xdata, best_fit(xdata), best_fit.v0, facecolor='tab:orange', alpha=.5)
         if debug:
@@ -169,7 +169,5 @@ def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
             print(f"[ERROR] Unable to compute the covariance matrix and fit parameter uncertainties!")
         else:
             stddevs = np.sqrt(np.diag(covariance))
-    if debug:
-        print(fit_method.fit_info['message'])
 
     return best_fit, stddevs, chi2
