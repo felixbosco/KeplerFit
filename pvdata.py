@@ -6,6 +6,7 @@ from astropy.units import Unit, Quantity
 
 class PVData(object):
 
+    # Default header keys when loading a PVData instance `from_file`. Change these to the header cards in your FITS file
     default_header_keys = {'position_reference': 'CRPIX1',
                            'd_pos': 'CDELT1',
                            'pos_unit': 'CUNIT1',
@@ -21,13 +22,22 @@ class PVData(object):
 
         Args:
             data (np.ndarray):
+                Position-velocity data image.
             noise (float, optional):
+                Uncertainty of `data` for parsing independent estimates. The code is using the standard deviation of
+                `data` if not provided.
             position_reference (int, optional):
+                Spatial index of the center of rotation in `data`.
             v_lsr_channel (int, optional):
+                Spectral index of the local standard of rest in `data`.
             d_pos (float, optional):
+                Increment in position in `pos_unit` per pixel.
             d_vel (float, optional):
+                Increment in velocity in `vel_unit` per pixel.
             pos_unit (str, optional):
+                Unit of spatial indexes per pixel.
             vel_unit (str, optional):
+                Unit of spectral indexes per pixel.
             v_lsr (float, optional):
                 Local standard of rest velocity in units of km/ s.
             transpose (bool, optional):
