@@ -30,7 +30,7 @@ def Keplerian1D(x, mass=1., v0=0., r0=0.):
     return v
 
 
-def model_Keplerian(positions, velocities, fit_method=None,
+def model_Keplerian(positions, velocities, v_lsr=None, fit_method=None,
                     flag_singularity=True, flag_radius=None, flag_intervals=None,
                     weak_quadrants=False, return_stddevs=True, plot=False, debug=False):
 
@@ -41,8 +41,8 @@ def model_Keplerian(positions, velocities, fit_method=None,
             PVdata object to compute the data from.
         velocities (np.ndarray or Quantity):
             Set as multiples of PVdata.noise (for instance 3sigma)
-        source_distance (any):
-            Distance to the source, which is necessary for computing physical distances.
+        v_lsr (float):
+            Systemic velocity in units of km/ s.
         fit_method (any, optional):
             Method to fit the model to the data.
         flag_singularity (bool, optional):
@@ -87,7 +87,8 @@ def model_Keplerian(positions, velocities, fit_method=None,
     # Apply fall back values
     if fit_method is None:
         fit_method = LevMarLSQFitter()
-    v_lsr = 0
+    if v_lsr is None:
+        v_lsr = 0
 
     # Create masked arrays
     xdata = np.ma.masked_array(positions, np.zeros(positions.shape, dtype=bool))
@@ -98,10 +99,13 @@ def model_Keplerian(positions, velocities, fit_method=None,
         print('Flagging the singularity')
         xdata = np.ma.masked_less(np.abs(xdata), 1e-6)
         ydata.mask = np.logical_or(ydata.mask, xdata.mask)
-        i = np.where(np.abs(positions) < 1e-6)[0]
-        xdata.mask[i] = True
-        ydata.mask[i] = True
+        # i = np.where(np.abs(positions) < 1e-6)[0]
+        # xdata.mask[i] = True
+        # ydata.mask[i] = True
         print(f">> Done")
+    else:
+        print("Not masking the singularity")
+
     if flag_radius is not None:
         print(f"Flagging towards a radial distance of {flag_radius}")
         if isinstance(flag_radius, Quantity):
@@ -110,25 +114,35 @@ def model_Keplerian(positions, velocities, fit_method=None,
         ydata.mask = np.logical_or(ydata.mask, xdata.mask)
         print(f">> Done")
         print(f"The mask is {xdata.mask}")
+    else:
+        print("No flag radius provided")
+
     if flag_intervals is not None:
         print('Flagging intervals...')
         for interval in flag_intervals:
             xdata = np.ma.masked_inside(xdata, interval[0], interval[1])
             ydata.mask = np.logical_or(ydata.mask, xdata.mask)
         print(f">> Flagged {np.sum(xdata.mask)} elements")
+    else:
+        print("No flag intervals provided")
 
     # Initialize the fit model
     # if self.start_low(indices=indices, weak_quadrants=weak_quadrants):
     #     model = Keplerian1D(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
     # else:
     #     model = Keplerian1D_neg(mass=10., v0=self.vLSR.value, r0=0, bounds={'mass': (0.0, None)})
+    print("Initializing the model...")
     model = Keplerian1D(mass=10., v0=v_lsr, r0=0, bounds={'mass': (0.0, None)})
+    if debug:
+        print(f"Initialize the model: {model}")
 
     # Fit the chosen model to the data
+    print("Fitting the model to the data...")
     best_fit = fit_method(model, xdata.compressed(), ydata.compressed())
 
     # Estimate chi2
-    chi2 = np.sum(np.square(best_fit(xdata) - ydata))
+    print("Computing the chi-squared value...")
+    chi2 = np.sum(np.square(best_fit(xdata.compressed()) - ydata.compressed()))
 
     # Plot
     if plot:
@@ -145,20 +159,17 @@ def model_Keplerian(positions, velocities, fit_method=None,
         plt.show()
         plt.close()
 
-    # return
+    # Prepare the return
+    stddevs = None
     if not isinstance(fit_method, LevMarLSQFitter):
         return_stddevs = False
     if return_stddevs:
         covariance = fit_method.fit_info['param_cov']
-        try:
+        if covariance is None:
+            print(f"[ERROR] Unable to compute the covariance matrix and fit parameter uncertainties!")
+        else:
             stddevs = np.sqrt(np.diag(covariance))
-            return best_fit, stddevs, chi2
-        except ValueError as e:
-            if covariance is None:
-                print(f"Catched an error that is due to an unsuccessful fit (covariance matrix is {covariance})")
-                print(f"ValueError: {e}")
-            return best_fit, chi2
     if debug:
         print(fit_method.fit_info['message'])
 
-    return best_fit, chi2
+    return best_fit, stddevs, chi2
