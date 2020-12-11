@@ -37,8 +37,8 @@ class PVData(object):
         # Store input parameters
         self.data = np.squeeze(data)  # Get rid of additional axes
         self.noise = noise
-        self.position_reference = position_reference
-        self.v_lsr_channel = v_lsr_channel
+        self.position_reference = int(position_reference)
+        self.v_lsr_channel = int(v_lsr_channel)
         self.d_pos = d_pos
         self.d_vel = d_vel
         self.pos_unit = pos_unit
@@ -133,10 +133,10 @@ class PVData(object):
         """
 
         # Estimate total flux of quadrants
-        q1 = np.sum(self.data[self.position_reference:, self.v_lsr_channel:])  # +x, +v
-        q2 = np.sum(self.data[:self.position_reference, self.v_lsr_channel:])  # -x, +v
-        q3 = np.sum(self.data[:self.position_reference, :self.v_lsr_channel])  # -x, -v
-        q4 = np.sum(self.data[self.position_reference:, :self.v_lsr_channel])  # +x, -v
+        q1 = np.sum(self.data[self.v_lsr_channel:, self.position_reference:])  # +x, +v
+        q2 = np.sum(self.data[self.v_lsr_channel:, :self.position_reference])  # -x, +v
+        q3 = np.sum(self.data[:self.v_lsr_channel, :self.position_reference])  # -x, -v
+        q4 = np.sum(self.data[:self.v_lsr_channel, self.position_reference:])  # +x, -v
 
         if not weak_quadrants:
             return q1 + q3 > q2 + q4
@@ -146,7 +146,7 @@ class PVData(object):
     def combine_extreme_channels(self, weak_quadrants=False):
 
         # Initialize extreme channels as an empty copy of the other channels attributes
-        self.extreme_channels = np.ma.empty_like(self.min_channels.shape)
+        self.extreme_channels = np.ma.empty_like(self.min_channels)
 
         # Fill array with values from the quadrants
         if self.start_low(weak_quadrants=weak_quadrants):
